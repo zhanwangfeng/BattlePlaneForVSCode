@@ -2,7 +2,7 @@
   "name": "battle-plane-vscode",
   "displayName": "BattlePlane",
   "description": "VS Code 里的经典「炸飞机」小游戏：在 10×10 棋盘摆放 3 架飞机，轰炸并击落敌方全部机头即获胜。",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "zhanwangfeng",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -24,9 +24,11 @@
     "out",
     "resources",
     "src/webview",
+    "src/multi/webview",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "node_modules/ws"
   ],
   "activationEvents": [
     "onView:battlePlane.start",
@@ -61,13 +63,33 @@
       {
         "command": "battlePlane.openSite",
         "title": "炸飞机：打开网页版",
-        "icon": "$(globe)"
+        "icon": "$(share)"
       },
       {
         "command": "battlePlane.restart",
         "title": "炸飞机：重开一局"
+      },
+      {
+        "command": "battlePlane.multiCreate",
+        "title": "炸飞机：创建联机房"
+      },
+      {
+        "command": "battlePlane.multiJoin",
+        "title": "炸飞机：加入联机房"
       }
     ],
+    "configuration": {
+      "title": "炸飞机 联机设置",
+      "properties": {
+        "battlePlane.multiPort": {
+          "type": "number",
+          "default": 19101,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "局域网联机使用的 WebSocket 端口（房主与加入方需一致）。"
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
@@ -80,8 +102,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc --noEmit -p ./ && esbuild src/extension.ts --bundle --platform=node --target=node16 --outfile=out/extension.js --external:vscode",
-    "watch": "tsc --noEmit -p ./ & esbuild src/extension.ts --bundle --platform=node --target=node16 --outfile=out/extension.js --external:vscode --watch",
+    "compile": "tsc --noEmit -p ./ && esbuild src/extension.ts --bundle --platform=node --target=node16 --outfile=out/extension.js --external:vscode --external:ws",
+    "watch": "tsc --noEmit -p ./ & esbuild src/extension.ts --bundle --platform=node --target=node16 --outfile=out/extension.js --external:vscode --external:ws --watch",
     "package": "vsce package"
   },
   "devDependencies": {
@@ -94,5 +116,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/zhanwangfeng/BattlePlaneForVSCode.git"
+  },
+  "dependencies": {
+    "@types/ws": "^8.18.1",
+    "ws": "^8.21.3"
   }
 }

@@ -65,9 +65,6 @@
   .cell.ghost-ok{outline:2px dashed var(--accent);outline-offset:-2px;z-index:2;}
   .cell.ghost-bad{outline:2px dashed #f87171;outline-offset:-2px;z-index:2;}
   /* 音效开关（固定右上角） */
-  .sound-toggle{position:fixed;top:16px;right:16px;z-index:50;background:var(--panel);
-    color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:18px;
-    line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.3);}
   .controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:18px 0;}
   button{
     background:var(--accent);color:#08233a;border:none;padding:10px 16px;border-radius:9px;
@@ -95,10 +92,9 @@
 </style>
 </head>
 <body>
-<button id="btnSound" class="sound-toggle" title="音效开关">🔊</button>
 <div class="wrap">
-  <h1>🛩️ 炸飞机</h1>
-  <div class="sub">规则：10×10 棋盘 · 摆放 3 架飞机 · 命中所有敌方「机头」即获胜</div>
+  <h1 id="title"></h1>
+  <div class="sub" id="sub"></div>
 
   <div class="status" id="status">阶段：布局 — 把 3 架飞机放到左侧战场</div>
 
@@ -114,21 +110,21 @@
   </div>
 
   <div class="controls" id="setupControls">
-    <button id="btnRotate">🔄 旋转飞机 (R)</button>
-    <button id="btnRandom">🎲 随机排列</button>
-    <button id="btnClear">🧹 清空</button>
-    <button id="btnConfirm">✅ 确认布局，开战</button>
+    <button id="btnRotate"></button>
+    <button id="btnRandom"></button>
+    <button id="btnClear"></button>
+    <button id="btnConfirm"></button>
   </div>
   <div class="controls" id="battleControls" style="display:none;">
-    <button class="ghost" id="btnRestart">🔁 重新开始</button>
+    <button class="ghost" id="btnRestart"></button>
   </div>
 
   <div class="legend">
-    <span><i class="swatch" style="background:var(--body)"></i>我方机身</span>
-    <span><i class="swatch" style="background:var(--head)"></i>我方机头</span>
-    <span><i class="swatch" style="background:var(--miss)"></i>未击中</span>
-    <span><i class="swatch cross" style="background:var(--body)"></i>击中机身</span>
-    <span><i class="swatch cross yellow" style="background:var(--head)"></i>击中机头</span>
+    <span><i class="swatch" style="background:var(--body)"></i><span id="legBody"></span></span>
+    <span><i class="swatch" style="background:var(--head)"></i><span id="legHead"></span></span>
+    <span><i class="swatch" style="background:var(--miss)"></i><span id="legMiss"></span></span>
+    <span><i class="swatch cross" style="background:var(--body)"></i><span id="legHitBody"></span></span>
+    <span><i class="swatch cross yellow" style="background:var(--head)"></i><span id="legHitHead"></span></span>
   </div>
   <div class="hint" id="hint">布局提示：点击格子放置当前飞机的「机头」，方向可旋转，飞机间可相邻但不可重叠。</div>
 </div>
@@ -137,6 +133,60 @@
 "use strict";
 const SIZE = 10;
 const NUM_PLANES = 3;
+
+const BOOT = window.BOOTSTRAP || {};
+let curLang = (BOOT.lang === 'en') ? 'en' : 'cn';
+let curDict = (BOOT.dictCn && BOOT.dictEn) ? (curLang === 'en' ? BOOT.dictEn : BOOT.dictCn) : {};
+function t(key, map){
+  let s = (curDict && curDict[key] != null) ? curDict[key] : key;
+  if (map) { for (const k in map) { s = s.split('{' + k + '}').join(String(map[k])); } }
+  return s;
+}
+function setupStatusText(){
+  if (placingIndex >= NUM_PLANES) return t('sp_all_placed');
+  if (placingIndex === 0) return t('sp_status_setup_begin', { n: NUM_PLANES });
+  return t('sp_status_setup_progress', { placed: placingIndex, n: NUM_PLANES });
+}
+function setText(id, s){ const el = document.getElementById(id); if (el) el.textContent = s; }
+function updateSoundBtn(){ const b = document.getElementById('btnSound'); if (b) b.textContent = soundOn ? '🔊' : '🔇'; }
+function applyStaticText(){
+  document.documentElement.lang = (curLang === 'en') ? 'en' : 'zh-CN';
+  setText('title', t('sp_title'));
+  setText('sub', t('sp_sub', { n: NUM_PLANES }));
+  setText('btnRotate', t('btn_rotate'));
+  setText('btnRandom', t('btn_random'));
+  setText('btnClear', t('btn_clear'));
+  setText('btnConfirm', t('btn_confirm'));
+  setText('btnRestart', t('btn_restart'));
+  setText('legBody', t('legend_body'));
+  setText('legHead', t('legend_head'));
+  setText('legMiss', t('legend_miss'));
+  setText('legHitBody', t('legend_hit_body'));
+  setText('legHitHead', t('legend_hit_head'));
+  updateSoundBtn();
+}
+function relocalize(){
+  applyStaticText();
+  if (phase === 'setup') {
+    setText('leftTitle', t('sp_left_title'));
+    setText('rightTitle', t('sp_right_unknown'));
+    setText('hint', t('sp_hint_setup'));
+    setStatus(setupStatusText());
+  } else if (phase === 'battle') {
+    setText('leftTitle', t('sp_my_attacking'));
+    setText('rightTitle', t('sp_enemy_bomb'));
+    setText('hint', t('sp_hint_battle'));
+  } else {
+    setText('leftTitle', t('sp_my_attacking'));
+    const revealed = enemyShotByPlayer.some(function(row){ return row.indexOf('reveal') >= 0; });
+    setText('rightTitle', revealed ? t('sp_reveal') : t('sp_enemy_bomb'));
+    setText('hint', t('sp_hint_battle'));
+    const eLeft = enemyPlanes.filter(function(p){ return !p.headHit; }).length;
+    setStatus(eLeft === 0 ? '<span class="win win-yes">' + t('sp_win') + '</span>' : '<span class="win win-no">' + t('sp_lose') + '</span>');
+  }
+  renderAll();
+}
+
 
 // 飞机相对机头的偏移 [dRow, dCol]，机头在 (0,0)，机头朝上(机身向下延伸)
 const PLANE_BASE = [
@@ -180,7 +230,7 @@ let lastAIShot = null;       // 电脑最后一次轰炸的格子 {r,c}
 
 // ---- 音效（Web Audio，无需外部文件） ----
 let audioCtx = null;
-let soundOn = true;
+let soundOn = (BOOT.sound === true || BOOT.sound === false) ? !!BOOT.sound : true;
 function ensureAudio(){
   if(!audioCtx){
     try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ audioCtx=null; }
@@ -264,6 +314,7 @@ function emptyGrid(){ return Array.from({length:SIZE},()=>Array(SIZE).fill(null)
 function emptyStrGrid(){ return Array.from({length:SIZE},()=>Array(SIZE).fill("none")); }
 
 function init(){
+  applyStaticText();
   phase="setup"; rotation=0; placingIndex=0;
   playerPlanes=[]; enemyPlanes=[];
   playerGrid=emptyGrid(); playerShotByAI=emptyStrGrid();
@@ -273,10 +324,10 @@ function init(){
   document.getElementById("setupControls").style.display="flex";
   document.getElementById("battleControls").style.display="none";
   document.getElementById("enemyCard").style.display="none";   // 布局阶段不显示敌方战场
-  document.getElementById("leftTitle").textContent="我方战场";
-  document.getElementById("rightTitle").textContent="敌方战场（未知）";
-  setStatus('阶段：布局 — 把 3 架飞机放到左侧战场（已放 '+playerPlanes.length+'/'+NUM_PLANES+'）');
-  document.getElementById("hint").textContent="布局提示：点击格子放置当前飞机的「机头」，方向可旋转，飞机间可相邻但不可重叠。";
+  document.getElementById("leftTitle").textContent=t('sp_left_title');
+  document.getElementById("rightTitle").textContent=t('sp_right_unknown');
+  setStatus(setupStatusText());
+  document.getElementById("hint").textContent=t('sp_hint_setup');
   buildBoards();
   renderAll();
 }
@@ -348,7 +399,7 @@ function onPlayerCellClick(r,c){
   if(phase!=="setup"||placingIndex>=NUM_PLANES) return;
   ensureAudio();
   if(!canPlace(r,c,rotation)){
-    setStatus('⚠️ 该位置无法放置（越界或与其它飞机重叠），请换一个位置或旋转方向。');
+    setStatus(t('sp_place_invalid'));
     sfx.clear();
     return;
   }
@@ -362,9 +413,9 @@ function onPlayerCellClick(r,c){
   playerPlanes.push({headR:r,headC:c,rot:rotation,cells,headHit:false});
   placingIndex++;
   if(placingIndex<NUM_PLANES){
-    setStatus('阶段：布局 — 已放 '+placingIndex+'/'+NUM_PLANES+' 架，继续放置下一架。');
+    setStatus(setupStatusText());
   }else{
-    setStatus('✅ 3 架飞机已放好！可微调或点击「确认布局，开战」。');
+    setStatus(t('sp_all_placed'));
   }
   renderAll();
 }
@@ -472,14 +523,14 @@ function checkWin(){
   const myHeadsLeft=playerPlanes.filter(p=>!p.headHit).length;
   if(enemyHeadsLeft===0){
     phase="over";
-    setStatus('<span class="win win-yes">🎉 你赢了！已击落全部敌方机头。</span>');
+    setStatus('<span class="win win-yes">' + t('sp_win') + '</span>');
     sfx.win();
     revealEnemy();
     return true;
   }
   if(myHeadsLeft===0){
     phase="over";
-    setStatus('<span class="win win-no">💥 你输了！我方全部机头被击落。</span>');
+    setStatus('<span class="win win-no">' + t('sp_lose') + '</span>');
     sfx.lose();
     revealEnemy();
     return true;
@@ -494,7 +545,7 @@ function revealEnemy(){
       enemyShotByPlayer[r][c]="reveal";
     }
   }
-  document.getElementById("rightTitle").textContent="敌方战场（已揭晓）";
+  document.getElementById("rightTitle").textContent=t('sp_reveal');
   renderAll();   // 重新渲染，真正把敌方飞机显示出来
 }
 
@@ -547,7 +598,7 @@ function renderAll(){
     const eLeft=enemyPlanes.filter(p=>!p.headHit).length;
     const mLeft=playerPlanes.filter(p=>!p.headHit).length;
     if(phase!=="over")
-      setStatus(`战斗阶段 — 剩余敌方机头：<b>${eLeft}</b> · 我方剩余机头：<b>${mLeft}</b> · 点击右侧棋盘发动攻击`);
+      setStatus(t('sp_status_battle', { e: '<b>' + eLeft + '</b>', m: '<b>' + mLeft + '</b>' }));
   }
   // 布局阶段：根据当前悬停格重绘放置预览（旋转/放置后无需移动鼠标即可更新）
   paintGhost(hoverR,hoverC);
@@ -578,19 +629,19 @@ document.getElementById("btnRandom").addEventListener("click",()=>{
     }
   }
   placingIndex=NUM_PLANES;
-  setStatus('✅ 随机布局完成！可微调（清空后手动放）或点击「确认布局，开战」。');
+  setStatus(t('sp_random_done'));
   renderAll();
 });
 document.getElementById("btnClear").addEventListener("click",()=>{
   ensureAudio(); sfx.clear();
   playerPlanes=[]; playerGrid=emptyGrid(); placingIndex=0; rotation=0;
-  setStatus('已清空，请重新放置 3 架飞机。');
+  setStatus(t('sp_cleared'));
   renderAll();
 });
 document.getElementById("btnConfirm").addEventListener("click",()=>{
   ensureAudio();
   if(placingIndex<NUM_PLANES){
-    setStatus('⚠️ 还有 '+(NUM_PLANES-placingIndex)+' 架飞机未放置，请先放好。');
+    setStatus(t('sp_not_enough', { n: (NUM_PLANES - placingIndex) }));
     return;
   }
   startBattle();
@@ -602,12 +653,10 @@ document.addEventListener("keydown",(e)=>{
     rotation=(rotation+1)%4; renderAll();
   }
 });
-// 音效开关
-document.getElementById("btnSound").addEventListener("click",()=>{
-  soundOn=!soundOn;
-  ensureAudio();
-  document.getElementById("btnSound").textContent = soundOn ? "🔊" : "🔇";
-  if(soundOn) sfx.rotate();
+window.addEventListener('message', function(e){
+  const m = e.data; if(!m) return;
+  if(m.type==='lang'){ curLang = (m.lang==='en')?'en':'cn'; curDict = (curLang==='en')?BOOT.dictEn:BOOT.dictCn; relocalize(); }
+  else if(m.type==='sound'){ soundOn = !!m.on; updateSoundBtn(); }
 });
 
 function startBattle(){
@@ -617,9 +666,9 @@ function startBattle(){
   document.getElementById("setupControls").style.display="none";
   document.getElementById("battleControls").style.display="flex";
   document.getElementById("enemyCard").style.display="";   // 开战后显示敌方战场
-  document.getElementById("leftTitle").textContent="我方战场（电脑攻击中）";
-  document.getElementById("rightTitle").textContent="敌方战场（点击轰炸）";
-  document.getElementById("hint").textContent="战斗提示：点击右侧敌方棋盘的格子投弹。灰色=未击中，绿色=击中机身，红色=击中机头。击落全部敌方机头即胜！";
+  document.getElementById("leftTitle").textContent=t('sp_my_attacking');
+  document.getElementById("rightTitle").textContent=t('sp_enemy_bomb');
+  document.getElementById("hint").textContent=t('sp_hint_battle');
   renderAll();
 }
 

@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  /* ---- 公共（与单机游戏一致）的游戏主区域样式 ---- */
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --line: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --head: #ef4444;
+    --body: #22c55e;
+    --miss: #64748b;
+    --plane: #475569;
+    --water: #1e293b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: radial-gradient(1200px 600px at 50% -10%, #1e3a5f, var(--bg));
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 13px; overflow: hidden;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  #topbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 8px 16px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0));
+  }
+  .brand { font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+  .turn {
+    flex: 1; text-align: center; font-weight: 600; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .turn.mine { color: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  .turn.win { color: var(--body); }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.55;} }
+  .conn { font-size: 12px; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+  .conn.ok { background: rgba(34,197,94,.15); color: var(--body); }
+  .conn.warn { background: rgba(239,68,68,.15); color: var(--head); }
+  .conn.info { background: rgba(56,189,248,.15); color: var(--accent); }
+
+  #infobar {
+    display: flex; justify-content: space-between; align-items: stretch; gap: 16px;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.15);
+  }
+  .info-left { display: flex; flex-direction: column; gap: 8px; min-width: 210px; }
+  .info-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 180px; text-align: center; }
+  .info-right { display: flex; flex-direction: column; gap: 8px; align-items: stretch; min-width: 210px; }
+  .pl-card { width: 100%; }
+
+  .room-info, .pl-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; min-height: 64px;
+  }
+  .ri-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin: 2px 0; color: var(--muted); }
+  .ri-row b { color: var(--text); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .mini {
+    margin-top: 8px; width: 100%; padding: 5px; font-size: 12px; cursor: pointer;
+    background: rgba(255,255,255,0.08); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .mini:hover { border-color: var(--accent); }
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+  .act-hint { font-size: 11px; color: var(--muted); }
+  button.primary {
+    padding: 9px 12px; border-radius: 10px; border: none; cursor: pointer;
+    background: linear-gradient(180deg, #38bdf8, #0ea5e9); color: #04121d; font-weight: 700;
+  }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+
+  .pl-card.me { border-color: var(--accent); background: rgba(56,189,248,.08); }
+  .pl-card.dead { opacity: .55; }
+  .pl-name { font-weight: 600; }
+  .pl-head { font-size: 11px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+  .pl-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; align-items: center; }
+  .heads { color: var(--muted); font-size: 11px; }
+  .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); }
+  .tag.host { color: var(--accent); border-color: rgba(56,189,248,.4); }
+  .tag.you { color: var(--accent); border-color: rgba(56,189,248,.4); }
+  .tag.spec { color: var(--muted); }
+  .tag.dead { color: var(--head); border-color: rgba(239,68,68,.4); }
+
+  /* ---- 游戏主区域：与单机游戏一致 ---- */
+  #main { flex: 1; display: flex; min-height: 0; }
+  #arena { flex: 1; overflow: auto; display: flex; flex-direction: column; align-items: center; padding: 24px 16px; gap: 14px; }
+  #status { min-height: 22px; font-weight: 600; text-align: center; color: var(--accent); }
+  #boards { display: flex; gap: 28px; flex-wrap: wrap; justify-content: center; }
+  .board-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .board-card.mine { border-color: var(--accent); }
+  .board-card h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; text-align: center; }
+  .board {
+    display: grid; grid-template-columns: repeat(10, 32px); grid-auto-rows: 32px; gap: 0;
+    background: #0b1426; padding: 2px; border-radius: 10px;
+  }
+  .cell { position: relative; }
+  .cell .tile { position: absolute; inset: 1px; border-radius: 4px; background: var(--water); border: 1px solid #2a3a52; transition: background .1s; }
+  .board.clickable .cell:not(.miss):not(.body):not(.hit-head):hover { outline: 2px solid var(--accent); outline-offset: -2px; z-index: 2; }
+  .cell.plane .tile { background: var(--body); }
+  .cell.head .tile { background: var(--head); }
+  .cell.miss .tile { background: var(--miss); }
+  .cell.body .tile { background: var(--body); }
+  .cell.hit-head .tile { background: var(--head); }
+  .cell.body .tile, .cell.hit-head .tile { overflow: hidden; }
+  .cell.body .tile::before, .cell.body .tile::after,
+  .cell.hit-head .tile::before, .cell.hit-head .tile::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 78%; height: 3px; border-radius: 2px;
+    background: #fff; transform-origin: center;
+  }
+  .cell.body .tile::before, .cell.hit-head .tile::before { transform: translate(-50%, -50%) rotate(45deg); }
+  .cell.body .tile::after, .cell.hit-head .tile::after { transform: translate(-50%, -50%) rotate(-45deg); }
+  .cell.hit-head .tile::before, .cell.hit-head .tile::after { background: #fde047; height: 4px; box-shadow: 0 0 3px rgba(0,0,0,.45); }
+  .cell.last-shot { z-index: 3; }
+  .cell.last-shot .tile { border: 2px solid #fbbf24; box-shadow: 0 0 6px 1px rgba(251,191,36,.7); }
+  .cell.ghost-ok { outline: 2px dashed var(--accent); outline-offset: -2px; z-index: 2; }
+  .cell.ghost-bad { outline: 2px dashed #f87171; outline-offset: -2px; z-index: 2; }
+  .cell .dot { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; pointer-events: none; z-index: 1; }
+  #controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #controls button {
+    padding: 9px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  #controls button:hover { border-color: var(--accent); }
+  #controls .primary { background: linear-gradient(180deg, #38bdf8, #0ea5e9); color: #04121d; border: none; font-weight: 700; }
+  #legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--muted); }
+  #legend .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; margin-right: 5px; vertical-align: -2px; border: 1px solid #2a3a52; }
+  #hint { margin: 0; color: var(--muted); font-size: 12px; text-align: center; max-width: 640px; }
+  #win { min-height: 24px; font-size: 18px; font-weight: 700; text-align: center; color: var(--accent); }
+  .lobby-wrap { text-align: center; margin-top: 40px; }
+  .lobby-big { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+  .lobby-sub { color: var(--muted); }
+  #toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+    background: rgba(15,30,45,.95); border: 1px solid var(--line); color: var(--text);
+    padding: 9px 16px; border-radius: 10px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 50;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">🛩️ 炸飞机 · 联机</div>
+    <div class="turn" id="turn"></div>
+    <div class="conn info" id="conn"></div>
+  </header>
+  <div id="infobar">
+    <div class="info-left">
+      <div class="room-info" id="roomInfo"></div>
+    </div>
+    <div class="info-center" id="centerActions"></div>
+    <div class="info-right" id="cards"></div>
+  </div>
+  <div id="main">
+    <div id="arena"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+  const BOOTSTRAP = __MULTI_BOOTSTRAP_VALUE__;
+  const ROLE = BOOTSTRAP.role || 'client';
+  const IS_HOST = ROLE === 'host';
+  const HOST_ID = BOOTSTRAP.hostId || 'HOST';
+  const vscode = acquireVsCodeApi();
+
+  let LANG = (BOOTSTRAP.lang === 'en') ? 'en' : 'cn';
+  let D = (LANG === 'en') ? (BOOTSTRAP.dictEn || {}) : (BOOTSTRAP.dictCn || {});
+  let soundOn = BOOTSTRAP.sound !== false;
+  let myNick = (BOOTSTRAP.nickname || '').slice(0, 16);
+
+  const DICT_CN = BOOTSTRAP.dictCn || {};
+  const DICT_EN = BOOTSTRAP.dictEn || {};
+
+  function $(id) { return document.getElementById(id); }
+  function toExt(msg) { vscode.postMessage(msg); }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+  function rotate90(d) { return [-d[1], d[0]]; }
+  function planeCells(headR, headC, rot) {
+    let offs = [
+      [0, 0],                                   // 机头
+      [-2, 1], [-1, 1], [0, 1], [1, 1], [2, 1], // 机翼行
+      [0, 2],                                   // 机身
+      [-1, 3], [0, 3], [1, 3]                   // 尾翼行
+    ];
+    const n = ((rot % 4) + 4) % 4;
+    for (let i = 0; i < n; i++) offs = offs.map(rotate90);
+    return offs.map(([dr, dc]) => [headR + dr, headC + dc]);
+  }
+  function inBounds(r, c) { return r >= 0 && r < 10 && c >= 0 && c < 10; }
+  function playerById(id) { return state.players.find((p) => p.id === id); }
+  function tl(key, map) {
+    let s = D[key] || key;
+    if (map) for (const k in map) s = s.split('{' + k + '}').join(String(map[k]));
+    return s;
+  }
+  function setLang(lang) {
+    LANG = lang;
+    D = (lang === 'en') ? DICT_EN : DICT_CN;
+    document.documentElement.lang = (lang === 'cn') ? 'zh-CN' : 'en';
+    renderArena();
+    refreshSidebar();
+    refreshTurn();
+    if (connDesc) renderConn(connDesc.kind, connDesc.key, connDesc.map);
+  }
+  window.addEventListener('message', (e) => {
+    const m = e.data; if (!m) return;
+    if (m.type === 'lang') setLang(m.lang);
+    else if (m.type === 'sound') soundOn = !!m.on;
+    else if (m.type === 'nick') { myNick = (m.name || '').slice(0, 16); refreshSidebar(); }
+  });
+
+  // ---- sound ----
+  let audioCtx = null;
+  function ac() {
+    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    return audioCtx;
+  }
+  function beep(freq, dur, type, vol) {
+    if (!soundOn) return;
+    const c = ac(); if (!c) return;
+    const o = c.createOscillator(); const g = c.createGain();
+    o.type = type || 'sine'; o.frequency.value = freq; g.gain.value = vol || 0.07;
+    o.connect(g); g.connect(c.destination);
+    const t = c.currentTime; o.start(t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.stop(t + dur + 0.02);
+  }
+  function playMiss() { beep(180, 0.18, 'sine', 0.07); }
+  function playBody() { beep(320, 0.18, 'square', 0.06); }
+  function playHead() { beep(520, 0.25, 'sawtooth', 0.08); setTimeout(() => beep(720, 0.2, 'sawtooth', 0.07), 110); }
+  function playWin() { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.2, 'triangle', 0.08), i * 120)); }
+  function playLose() { [400, 300, 200].forEach((f, i) => setTimeout(() => beep(f, 0.3, 'sine', 0.07), i * 160)); }
+
+  // ---- state ----
+  const SIZE = 10, NUM_PLANES = 3;
+  let myId = IS_HOST ? HOST_ID : null;
+  let state = { phase: 'lobby', turn: null, hostId: HOST_ID, lastShot: null, ranking: null, players: [] };
+  const gridMap = new Map();
+  const planeMap = new Map();
+  let myGrid = null;
+  let elimSeq = 0;
+  let connDesc = null;
+
+  // placement
+  let placePlanes = [];
+  let placeGrid = new Int8Array(SIZE * SIZE);
+  let rotation = 0;
+  let placingIndex = 0;
+  let myPlaced = false;
+  let hoverR = -1, hoverC = -1;
+  let placeBoardEl = null;
+
+  // ---- host authoritative logic ----
+  function makePlayer(id, name, isHost) {
+    return {
+      id, name: (name || D.guest).slice(0, 16), isHost: !!isHost,
+      order: state.players.length, connected: true, waiting: false, isSpectator: false,
+      placed: false, headsLeft: NUM_PLANES, eliminated: false, eliminatedSeq: 0,
+      shots: new Array(SIZE * SIZE).fill(0)
+    };
+  }
+  function ensureHostPlayer() {
+    if (!playerById(HOST_ID)) state.players.push(makePlayer(HOST_ID, myNick || (D.guest + '(房主)'), true));
+  }
+  function hostEnsurePlayer(from, name) {
+    let p = playerById(from);
+    if (!p) {
+      const spectator = (state.phase === 'battle' || state.phase === 'over');
+      p = makePlayer(from, name || D.guest, false);
+      p.isSpectator = spectator;
+      state.players.push(p);
+    } else {
+      p.connected = true;
+      if (typeof name === 'string' && name) p.name = name.slice(0, 16);
+    }
+    return p;
+  }
+  function hostSend(m) { toExt(m); }
+  function hostSendTo(to, m) { toExt(Object.assign({}, m, { to })); }
+  function buildPublicState() {
+    return {
+      phase: state.phase, turn: state.turn, hostId: HOST_ID, lastShot: state.lastShot, ranking: state.ranking,
+      players: state.players.map((p) => ({
+        id: p.id, name: p.name, isHost: !!p.isHost, order: p.order, connected: !!p.connected,
+        waiting: !!p.waiting, isSpectator: !!p.isSpectator, placed: !!p.placed, headsLeft: p.headsLeft,
+        eliminated: !!p.eliminated, eliminatedSeq: p.eliminatedSeq || 0, shots: Array.from(p.shots),
+        reveal: (state.phase === 'over') ? gridToReveal(p.id) : undefined
+      }))
+    };
+  }
+  function gridToReveal(id) {
+    const g = gridMap.get(id);
+    return g ? Array.from(g) : new Array(SIZE * SIZE).fill(0);
+  }
+  function hostPush() { const pub = buildPublicState(); applyState(pub); hostSend({ type: 'state', state: pub }); }
+  function allPlacedClient() {
+    const ps = state.players.filter((p) => p.connected && !p.isSpectator);
+    if (ps.length < 2) return false;
+    return ps.every((p) => p.placed);
+  }
+  function hostReceiveSetup(id, planes) {
+    if (!planes || !Array.isArray(planes) || planes.length !== NUM_PLANES) return;
+    const grid = new Int8Array(SIZE * SIZE); const list = [];
+    for (const pl of planes) {
+      const hr = pl.headR, hc = pl.headC, rot = ((pl.rot % 4) + 4) % 4;
+      if (typeof hr !== 'number' || typeof hc !== 'number') return;
+      const cells = planeCells(hr, hc, rot);
+      for (const [r, c] of cells) { if (!inBounds(r, c)) return; const i = r * SIZE + c; if (grid[i] !== 0) return; grid[i] = (r === hr && c === hc) ? 2 : 1; }
+      list.push({ headR: hr, headC: hc, rot, cells });
+    }
+    gridMap.set(id, grid); planeMap.set(id, list);
+    const p = playerById(id); if (p) { p.placed = true; p.shots = new Array(SIZE * SIZE).fill(0); }
+    if (allPlacedClient()) startBattle();
+  }
+  function startBattle() {
+    state.phase = 'battle'; state.lastShot = null; state.ranking = null;
+    const first = state.players.find((p) => p.connected && !p.isSpectator && !p.eliminated);
+    state.turn = first ? first.id : null;
+    hostPush();
+  }
+  function advanceTurn() {
+    const order = state.players.filter((p) => p.connected && !p.eliminated && !p.isSpectator);
+    if (order.length === 0) return;
+    let idx = order.findIndex((p) => p.id === state.turn); if (idx < 0) idx = 0;
+    state.turn = order[(idx + 1) % order.length].id;
+  }
+  function checkGameOver() {
+    const active = state.players.filter((p) => p.connected && !p.eliminated && !p.isSpectator);
+    if (active.length <= 1) { state.phase = 'over'; state.ranking = computeRanking(); }
+  }
+  function computeRanking() {
+    const players = state.players.filter((p) => !p.isSpectator);
+    return players.slice().sort((a, b) => {
+      const aA = !a.eliminated, bA = !b.eliminated;
+      if (aA !== bA) return aA ? -1 : 1;
+      if (aA) return b.headsLeft - a.headsLeft;
+      return b.eliminatedSeq - a.eliminatedSeq;
+    }).map((p, i) => ({ id: p.id, name: p.name, rank: i + 1 }));
+  }
+  function hostResolveShot(attackerId, targetId, r, c) {
+    if (state.phase !== 'battle') return;
+    if (attackerId !== state.turn) return;
+    const target = playerById(targetId);
+    if (!target || target.eliminated || target.isSpectator) return;
+    if (!inBounds(r, c)) return;
+    const i = r * SIZE + c;
+    if (target.shots[i] !== 0) return;
+    const g = gridMap.get(targetId);
+    let result;
+    if (!g || g[i] === 0) result = 1; else if (g[i] === 2) result = 3; else result = 2;
+    target.shots[i] = result;
+    if (result === 3) { target.headsLeft--; if (target.headsLeft <= 0) { target.eliminated = true; target.eliminatedSeq = (elimSeq++); } }
+    state.lastShot = { attacker: attackerId, target: targetId, r, c, result };
+    advanceTurn(); checkGameOver(); hostPush();
+    hostSend({ type: 'shot', attacker: attackerId, target: targetId, r, c, result });
+    if (result === 1) playMiss(); else if (result === 2) playBody(); else playHead();
+  }
+  function hostStartGame() {
+    const active = state.players.filter((p) => p.connected);
+    if (active.length < 2) { toast(D.needTwo); return; }
+    const ordered = active.slice().sort((a, b) => a.order - b.order);
+    ordered.forEach((p, i) => {
+      p.isSpectator = i >= 2; p.placed = false; p.eliminated = false; p.headsLeft = NUM_PLANES;
+      p.shots = new Array(SIZE * SIZE).fill(0); p.eliminatedSeq = 0;
+      gridMap.delete(p.id); planeMap.delete(p.id);
+    });
+    state.phase = 'setup'; state.turn = null; state.lastShot = null; state.ranking = null; elimSeq = 0;
+    resetPlacementLocal(); hostPush();
+  }
+  function hostHandle(msg) {
+    switch (msg.type) {
+      case 'join': {
+        const from = msg.from;
+        const activeBefore = state.players.filter((p) => p.connected && !p.isSpectator && p.id !== from).length;
+        if (activeBefore >= 2) { hostSendTo(from, { type: 'full' }); return; }
+        hostEnsurePlayer(from, msg.name);
+        hostSendTo(from, { type: 'welcome', youId: from, state: buildPublicState() });
+        hostPush();
+        break;
+      }
+      case 'setup':
+        if (msg.from) hostReceiveSetup(msg.from, msg.planes);
+        if (state.phase === 'setup') hostPush();
+        break;
+      case 'shot':
+        if (msg.from) hostResolveShot(msg.from, msg.target, msg.r, msg.c);
+        break;
+      case 'rename': {
+        const p = playerById(msg.from);
+        if (p && typeof msg.name === 'string') { p.name = msg.name.slice(0, 16) || p.name; hostPush(); }
+        break;
+      }
+      case 'leave': {
+        const p = playerById(msg.from);
+        if (p) { p.connected = false; p.waiting = false; }
+        if (state.turn === msg.from) advanceTurn();
+        checkGameOver(); hostPush();
+        break;
+      }
+      default: break;
+    }
+  }
+  function hostStart() {
+    ensureHostPlayer();
+    window.addEventListener('message', (event) => { const m = event.data; if (m && typeof m === 'object') hostHandle(m); });
+    renderConn('ok', 'connHost');
+    applyState(buildPublicState());
+  }
+
+  // ---- client logic ----
+  function clientStart() {
+    renderConn('info', 'connConnecting');
+    applyState(state);
+    window.addEventListener('message', (event) => { const m = event.data; if (m && typeof m === 'object') clientHandle(m); });
+  }
+  function clientHandle(msg) {
+    switch (msg.type) {
+      case 'connected':
+        renderConn('ok', 'connConnectedAddr', { addr: BOOTSTRAP.roomAddr || '' });
+        toExt({ type: 'join', name: (myNick || '').slice(0, 16) || D.guest });
+        break;
+      case 'welcome':
+        myId = msg.youId; applyState(msg.state); break;
+      case 'state':
+        applyState(msg.state); break;
+      case 'shot':
+        if (msg.result === 1) playMiss(); else if (msg.result === 2) playBody(); else if (msg.result === 3) playHead();
+        break;
+      case 'full':
+        toast(D.roomFull); renderConn('warn', 'connClosed'); break;
+      case 'disconnected':
+        renderConn('warn', 'connDisconnected'); break;
+      case 'shutdown':
+        renderConn('warn', 'connClosed'); break;
+      default: break;
+    }
+  }
+
+  // ---- apply state / render ----
+  function resetPlacementLocal() {
+    placePlanes = []; placeGrid = new Int8Array(SIZE * SIZE); rotation = 0; placingIndex = 0; myPlaced = false; hoverR = -1; hoverC = -1;
+  }
+  function applyState(s) {
+    const prevPhase = state.phase;
+    state = s;
+    if (IS_HOST) myId = HOST_ID;
+    if (IS_HOST && gridMap.has(HOST_ID)) myGrid = gridMap.get(HOST_ID);
+    if (state.phase === 'setup' && prevPhase !== 'setup') resetPlacementLocal();
+    if (prevPhase !== 'over' && state.phase === 'over' && state.ranking) {
+      const top = state.ranking[0]; if (top && top.id === myId) playWin(); else playLose();
+    }
+    renderArena(); refreshSidebar(); refreshTurn();
+  }
+  function renderArena() {
+    if (state.phase === 'lobby') renderLobby();
+    else if (state.phase === 'setup') renderSetup();
+    else renderBattle();
+  }
+  function renderLobby() {
+    const arena = $('arena'); arena.innerHTML = '';
+    const wrap = document.createElement('div'); wrap.className = 'lobby-wrap';
+    const big = document.createElement('div'); big.className = 'lobby-big';
+    big.textContent = IS_HOST ? tl('mp_lobbyHostHint') : tl('mp_connWaitHost');
+    const sub = document.createElement('div'); sub.className = 'lobby-sub';
+    sub.textContent = '';
+    wrap.appendChild(big); wrap.appendChild(sub); arena.appendChild(wrap);
+  }
+
+  function buildBoard(bid, model) {
+    model.bid = bid;
+    const card = document.createElement('div');
+    card.className = 'board-card' + (model.mine ? ' mine' : '');
+    const title = document.createElement('h2'); title.textContent = model.title || '';
+    card.appendChild(title);
+    const board = document.createElement('div');
+    board.className = 'board' + (model.clickable ? ' clickable' : '');
+    board.dataset.bid = bid;
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const cell = document.createElement('div'); cell.className = 'cell';
+        cell.innerHTML = '<div class="tile"></div>';
+        cell.dataset.r = r; cell.dataset.c = c; cell.dataset.bid = bid;
+        if (model.place) {
+          cell.addEventListener('click', () => onPlaceClick(r, c));
+          cell.addEventListener('mouseenter', () => { hoverR = r; hoverC = c; repaintPlaceBoard(board); });
+          cell.addEventListener('mouseleave', () => { hoverR = -1; hoverC = -1; repaintPlaceBoard(board); });
+        } else if (model.clickable) {
+          cell.addEventListener('click', onBattleClick);
+        }
+        if (!model.place) paintByModel(cell, r, c, model);
+        board.appendChild(cell);
+      }
+    }
+    if (model.place) { placeBoardEl = board; repaintPlaceBoard(board); }
+    card.appendChild(board);
+    return card;
+  }
+  function paintCell(cell, kind, dot) {
+    cell.className = 'cell' + (kind ? ' ' + kind : '');
+    cell.innerHTML = '<div class="tile"></div>';
+    if (dot) {
+      const tile = cell.firstElementChild;
+      const span = document.createElement('span'); span.className = 'dot'; span.textContent = '头';
+      tile.appendChild(span);
+    }
+  }
+  function paintByModel(cell, r, c, model) {
+    if (model.place) return;
+    const i = r * SIZE + c;
+    const shot = model.shots ? model.shots[i] : 0;
+    if (model.self) {
+      if (shot === 1) paintCell(cell, 'miss', false);
+      else if (shot === 2) paintCell(cell, 'body', false);
+      else if (shot === 3) paintCell(cell, 'hit-head', false);
+      else if (model.grid && model.grid[i] === 2) paintCell(cell, 'head', true);
+      else if (model.grid && model.grid[i] === 1) paintCell(cell, 'plane', false);
+      else paintCell(cell, '', false);
+    } else {
+      if (shot === 1) paintCell(cell, 'miss', false);
+      else if (shot === 2) paintCell(cell, 'body', false);
+      else if (shot === 3) paintCell(cell, 'hit-head', false);
+      else if (model.reveal && model.reveal[i] === 2) paintCell(cell, 'head', true);
+      else if (model.reveal && model.reveal[i] === 1) paintCell(cell, 'plane', false);
+      else paintCell(cell, '', false);
+    }
+    if (state.lastShot && state.lastShot.target === model.bid && state.lastShot.r === r && state.lastShot.c === c) cell.classList.add('last-shot');
+  }
+  function repaintPlaceBoard(board) {
+    if (!board) board = placeBoardEl;
+    if (!board) return;
+    const showGhost = hoverR >= 0 && placingIndex < NUM_PLANES;
+    const cells = showGhost ? planeCells(hoverR, hoverC, rotation) : null;
+    const ok = cells ? cells.every(([rr, cc]) => inBounds(rr, cc) && placeGrid[rr * SIZE + cc] === 0) : false;
+    for (const cell of board.children) {
+      const r = +cell.dataset.r, c = +cell.dataset.c; const i = r * SIZE + c;
+      let kind = '';
+      if (placeGrid[i] === 2) kind = 'head';
+      else if (placeGrid[i] === 1) kind = 'plane';
+      else if (cells && cells.some(([rr, cc]) => rr === r && cc === c)) kind = ok ? 'ghost-ok' : 'ghost-bad';
+      paintCell(cell, kind, kind === 'head');
+    }
+  }
+  function onBattleClick(e) {
+    const cell = e.currentTarget; const bid = cell.dataset.bid;
+    const r = +cell.dataset.r, c = +cell.dataset.c;
+    if (state.phase !== 'battle' || state.turn !== myId) return;
+    if (bid === myId) return;
+    const opp = playerById(bid);
+    if (!opp || opp.eliminated || opp.isSpectator) return;
+    const i = r * SIZE + c;
+    if (opp.shots[i] !== 0) return;
+    if (IS_HOST) hostResolveShot(HOST_ID, bid, r, c); else toExt({ type: 'shot', target: bid, r, c });
+  }
+  function getMyGrid() { return IS_HOST ? (gridMap.get(HOST_ID) || null) : myGrid; }
+  function myPlayerShots() { const p = playerById(myId); return p ? p.shots : new Array(SIZE * SIZE).fill(0); }
+
+  // ---- setup / battle (与单机一致) ----
+  function statusEl() { return $('status'); }
+  function setStatus(s) { const el = $('status'); if (el) el.innerHTML = s; }
+  function setHint(s) { const el = $('hint'); if (el) el.textContent = s; }
+  function renderLegend() {
+    const el = $('legend'); if (!el) return;
+    const items = [['legend_body', 'var(--body)'], ['legend_head', 'var(--head)'], ['legend_miss', 'var(--miss)'], ['legend_hit_body', 'var(--body)'], ['legend_hit_head', 'var(--head)']];
+    el.innerHTML = '';
+    for (const [key, color] of items) {
+      const span = document.createElement('span');
+      span.innerHTML = '<span class="swatch" style="background:' + color + '"></span>' + tl(key);
+      el.appendChild(span);
+    }
+  }
+  function arenaAppend(...nodes) { const a = $('arena'); nodes.forEach((n) => a.appendChild(n)); }
+  function newArenaBoxes() {
+    const a = $('arena'); a.innerHTML = '';
+    const status = document.createElement('div'); status.id = 'status';
+    const boards = document.createElement('div'); boards.id = 'boards';
+    const controls = document.createElement('div'); controls.id = 'controls';
+    const legend = document.createElement('div'); legend.id = 'legend';
+    const hint = document.createElement('div'); hint.id = 'hint';
+    const win = document.createElement('div'); win.id = 'win';
+    a.appendChild(status); a.appendChild(boards); a.appendChild(controls); a.appendChild(legend); a.appendChild(hint); a.appendChild(win);
+    return { boards, controls, win };
+  }
+  function renderSetup() {
+    const { boards, controls } = newArenaBoxes();
+    boards.appendChild(buildBoard('__self__', { place: true, mine: true, title: tl('sp_left_title') }));
+    boards.appendChild(buildBoard('__opp__', { title: tl('sp_right_unknown') }));
+    const bRot = document.createElement('button'); bRot.textContent = tl('btn_rotate');
+    bRot.onclick = () => { rotation = (rotation + 1) % 4; const b = boards.querySelector('.board'); repaintPlaceBoard(b); };
+    const bRand = document.createElement('button'); bRand.textContent = tl('btn_random'); bRand.onclick = placeRandom;
+    const bClear = document.createElement('button'); bClear.textContent = tl('btn_clear'); bClear.onclick = placeClear;
+    const bConf = document.createElement('button'); bConf.className = 'primary'; bConf.id = 'btnConfirm'; bConf.textContent = tl('btn_confirm'); bConf.onclick = confirmPlace;
+    controls.appendChild(bRot); controls.appendChild(bRand); controls.appendChild(bClear); controls.appendChild(bConf);
+    renderLegend();
+    setHint(tl('sp_hint_setup'));
+    updatePlaceControls();
+  }
+  function renderBattle() {
+    const { boards, controls, win } = newArenaBoxes();
+    win.textContent = '';
+    const active = state.players.filter((p) => p.connected && !p.isSpectator);
+    const opp = active.find((p) => p.id !== myId);
+    const myShots = myPlayerShots();
+    const over = state.phase === 'over';
+    const iWon = !!(state.ranking && state.ranking[0] && state.ranking[0].id === myId);
+    const myTitle = over
+      ? (tl('mp_my_title') + '（' + (iWon ? tl('mp_victory') : tl('mp_defeat')) + '）')
+      : tl('mp_my_title');
+    boards.appendChild(buildBoard(myId, {
+      mine: true, self: true, grid: getMyGrid(), shots: myShots, title: myTitle
+    }));
+    if (opp) {
+      const oppTitle = over
+        ? (tl('mp_enemy_title') + '（' + (iWon ? tl('mp_defeat') : tl('mp_victory')) + '）')
+        : tl('mp_enemy_title');
+      boards.appendChild(buildBoard(opp.id, {
+        mine: false, self: false, shots: opp.shots,
+        reveal: over ? opp.reveal : null,
+        clickable: (!over && state.phase === 'battle' && state.turn === myId && !opp.eliminated),
+        title: oppTitle
+      }));
+    } else {
+      boards.appendChild(buildBoard('__opp__', { title: tl('sp_right_unknown') }));
+    }
+    renderLegend();
+    setHint(tl('sp_hint_battle'));
+    updateBattleStatus();
+  }
+  function updateBattleStatus() {
+    const active = state.players.filter((p) => p.connected && !p.isSpectator);
+    const opp = active.find((p) => p.id !== myId);
+    const me = playerById(myId);
+    const eLeft = opp ? opp.headsLeft : 0;
+    const mLeft = me ? me.headsLeft : 0;
+    setStatus(tl('sp_status_battle', { e: eLeft, m: mLeft }));
+  }
+  function onRestart() {
+    if (IS_HOST) hostStartGame(); else toast(tl('mp_waitOthers'));
+  }
+
+  // ---- placement actions ----
+  function onPlaceClick(r, c) {
+    if (myPlaced || placingIndex >= NUM_PLANES) return;
+    const cells = planeCells(r, c, rotation);
+    if (!cells.every(([rr, cc]) => inBounds(rr, cc) && placeGrid[rr * SIZE + cc] === 0)) { setStatus(tl('sp_place_invalid')); return; }
+    for (const [rr, cc] of cells) { const i = rr * SIZE + cc; placeGrid[i] = (rr === r && cc === c) ? 2 : 1; }
+    placePlanes.push({ headR: r, headC: c, rot: rotation, cells });
+    placingIndex++;
+    const b = document.querySelector('.board[data-bid="__self__"]') || placeBoardEl;
+    if (b) repaintPlaceBoard(b);
+    updatePlaceControls();
+  }
+  function placeRandom() {
+    if (myPlaced) return;
+    placeGrid = new Int8Array(SIZE * SIZE); placePlanes = []; placingIndex = 0;
+    let guard = 0;
+    while (placePlanes.length < NUM_PLANES && guard++ < 3000) {
+      const rot = Math.floor(Math.random() * 4);
+      const r = Math.floor(Math.random() * SIZE), c = Math.floor(Math.random() * SIZE);
+      const cells = planeCells(r, c, rot);
+      if (!cells.every(([rr, cc]) => inBounds(rr, cc) && placeGrid[rr * SIZE + cc] === 0)) continue;
+      for (const [rr, cc] of cells) { const i = rr * SIZE + cc; placeGrid[i] = (rr === r && cc === c) ? 2 : 1; }
+      placePlanes.push({ headR: r, headC: c, rot, cells });
+      placingIndex = placePlanes.length;
+    }
+    if (placePlanes.length < NUM_PLANES) { placeGrid = new Int8Array(SIZE * SIZE); placePlanes = []; placingIndex = 0; }
+    const b = document.querySelector('.board[data-bid="__self__"]') || placeBoardEl;
+    if (b) repaintPlaceBoard(b);
+    updatePlaceControls();
+  }
+  function placeClear() {
+    if (myPlaced) return;
+    placeGrid = new Int8Array(SIZE * SIZE); placePlanes = []; placingIndex = 0;
+    const b = document.querySelector('.board[data-bid="__self__"]') || placeBoardEl;
+    if (b) repaintPlaceBoard(b);
+    updatePlaceControls();
+  }
+  function confirmPlace() {
+    if (myPlaced) return;
+    if (placePlanes.length !== NUM_PLANES) { toast(tl('sp_not_enough', { n: NUM_PLANES - placePlanes.length })); return; }
+    myPlaced = true; myGrid = Int8Array.from(placeGrid);
+    if (IS_HOST) { hostReceiveSetup(HOST_ID, placePlanes.map((p) => ({ headR: p.headR, headC: p.headC, rot: p.rot }))); if (state.phase === 'setup') hostPush(); }
+    else toExt({ type: 'setup', planes: placePlanes.map((p) => ({ headR: p.headR, headC: p.headC, rot: p.rot })) });
+    setStatus(tl('mp_placeConfirmed'));
+    updatePlaceControls();
+  }
+  function updatePlaceControls() {
+    const btn = $('btnConfirm'); if (btn) btn.disabled = myPlaced || placingIndex < NUM_PLANES;
+    if (state.phase !== 'setup') return;
+    if (myPlaced) setStatus(tl('mp_placeConfirmed'));
+    else if (placingIndex >= NUM_PLANES) setStatus(tl('sp_all_placed'));
+    else setStatus(tl('sp_placed', { n: placingIndex }));
+  }
+
+  // ---- sidebar (address + player cards) ----
+  function renderConn(kind, key, map) {
+    connDesc = { kind, key, map: map || null };
+    const el = $('conn'); el.className = 'conn ' + kind; el.textContent = tl(key, map);
+  }
+  function refreshSidebar() {
+    const ri = $('roomInfo');
+    if (BOOTSTRAP.roomAddr) {
+      ri.innerHTML = '<div class="ri-row"><span>' + tl('mp_lobbyAddr') + '</span><b>' + escapeHtml(BOOTSTRAP.roomAddr) + '</b></div>'
+        + (BOOTSTRAP.roomCode ? '<div class="ri-row"><span>' + tl('mp_lobbyCode') + '</span><b>' + escapeHtml(BOOTSTRAP.roomCode) + '</b></div>' : '')
+        + '<button id="copyAddr" class="mini">' + tl('mp_copyAddr') + '</button>';
+      const cb = $('copyAddr'); if (cb) cb.onclick = copyAddr;
+    } else ri.innerHTML = '';
+
+    // 中央操作区：大厅 / 结束阶段显示「开始游戏」或「重新开始」，文字在上、按钮在下（居中）
+    const center = $('centerActions'); center.innerHTML = '';
+    if (IS_HOST && state.phase === 'lobby') {
+      const n = state.players.filter((p) => p.connected && !p.isSpectator).length;
+      const hint = document.createElement('div'); hint.className = 'act-hint'; hint.textContent = tl('mp_lobbyHint'); center.appendChild(hint);
+      const btn = document.createElement('button'); btn.className = 'primary'; btn.textContent = tl('mp_startGame');
+      btn.disabled = n < 2; btn.onclick = hostStartGame; center.appendChild(btn);
+    } else if (state.phase === 'over') {
+      const iWon = !!(state.ranking && state.ranking[0] && state.ranking[0].id === myId);
+      const txt = document.createElement('div'); txt.className = 'act-hint'; txt.textContent = iWon ? tl('mp_youWin') : tl('mp_youLose'); center.appendChild(txt);
+      const btn = document.createElement('button'); btn.className = 'primary'; btn.textContent = tl('btn_restart');
+      if (IS_HOST) { btn.onclick = hostStartGame; } else { btn.disabled = true; }
+      center.appendChild(btn);
+    }
+
+    // 右上角：仅显示对方玩家卡片（尺寸与房间地址控件一致）
+    const cards = $('cards'); cards.innerHTML = '';
+    const others = state.players.filter((p) => p.id !== myId);
+    for (const p of others) {
+      const card = document.createElement('div');
+      card.className = 'pl-card' + (p.eliminated ? ' dead' : '');
+      card.innerHTML = playerCardHtml(p);
+      cards.appendChild(card);
+    }
+  }
+  function playerCardHtml(p) {
+    let tags = '';
+    if (p.isHost) tags += '<span class="tag host">' + tl('mp_host') + '</span>';
+    if (p.id === myId) tags += '<span class="tag you">' + tl('mp_you') + '</span>';
+    if (p.isSpectator) tags += '<span class="tag spec">' + tl('mp_spectator') + '</span>';
+    if (p.eliminated) tags += '<span class="tag dead">' + tl('mp_dead') + '</span>';
+    const status = p.isSpectator ? '' : (tl('mp_heads') + ': ' + Math.max(0, p.headsLeft) + '/' + NUM_PLANES);
+    const head = (p.id !== myId) ? '<div class="pl-head">' + (p.isSpectator ? tl('mp_spec_label') : tl('mp_opponent')) + '</div>' : '';
+    return head + '<div class="pl-name">' + escapeHtml(p.name) + '</div><div class="pl-meta">' + tags + '<span class="heads">' + status + '</span></div>';
+  }
+  function refreshTurn() {
+    const el = $('turn');
+    if (state.phase === 'battle') {
+      if (state.turn === myId) { el.className = 'turn mine'; el.textContent = '⚡ ' + tl('mp_turnYour'); }
+      else { const p = playerById(state.turn); el.className = 'turn'; el.textContent = tl('mp_turnOther', { name: p ? p.name : '?' }); }
+    } else if (state.phase === 'setup') { el.className = 'turn'; el.textContent = '🛠 ' + tl('mp_placeTitle'); }
+    else if (state.phase === 'over') {
+      const rank = state.ranking;
+      if (rank && rank.length) { const top = rank[0]; if (top.id === myId) { el.className = 'turn win'; el.textContent = '🏆 ' + tl('mp_youWin'); } else { el.className = 'turn'; el.textContent = '🏁 ' + tl('mp_gameOver') + ' · ' + tl('mp_ranking') + ': ' + escapeHtml(top.name); } }
+      else { el.className = 'turn'; el.textContent = tl('mp_gameOver'); }
+    } else { el.className = 'turn'; el.textContent = '⌛ ' + tl('mp_lobbyTitle'); }
+  }
+  function copyAddr() {
+    if (navigator.clipboard && BOOTSTRAP.roomAddr) navigator.clipboard.writeText(BOOTSTRAP.roomAddr).then(() => toast(tl('mp_addrCopied')), () => {});
+  }
+  function onRename(name) {
+    if (IS_HOST) { const p = playerById(HOST_ID); if (p) p.name = name || p.name; hostPush(); toExt({ type: 'rename', name }); }
+    else toExt({ type: 'rename', name });
+  }
+
+  // ---- toast ----
+  function toast(msg) {
+    let t = $('toast'); if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show'); clearTimeout(t._timer); t._timer = setTimeout(() => t.classList.remove('show'), 1600);
+  }
+
+  // ---- init ----
+  function init() {
+    if (IS_HOST) hostStart(); else clientStart();
+  }
+  init();
+</script>
+</body>
+</html>
