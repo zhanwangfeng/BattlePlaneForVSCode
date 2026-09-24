@@ -1,5 +1,9 @@
 # 更新日志
 
+## 0.3.0
+
+- 提取联机通用模块：将局域网联机桥接逻辑（WebSocket 服务 / 客户端、peer 管理、广播单播、webview↔网络中转、命令注册与清理）抽离到 `src/common/lan-multiplayer.ts`，扩展端 `src/multi/multiExtension.ts` 改为复用该模块，便于其他游戏项目直接集成。
+
 ## 0.2.0
 
 - 新增局域网联机对战：内置 WebSocket 服务，支持创建 / 加入房间，与好友实时双人炸飞机。

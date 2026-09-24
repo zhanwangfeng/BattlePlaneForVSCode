@@ -394,7 +394,7 @@
         if (p && typeof msg.name === 'string') { p.name = msg.name.slice(0, 16) || p.name; hostPush(); }
         break;
       }
-      case 'leave': {
+      case 'peerDisconnected': {
         const p = playerById(msg.from);
         if (p) { p.connected = false; p.waiting = false; }
         if (state.turn === msg.from) advanceTurn();
@@ -419,7 +419,7 @@
   }
   function clientHandle(msg) {
     switch (msg.type) {
-      case 'connected':
+      case 'clientConnected':
         renderConn('ok', 'connConnectedAddr', { addr: BOOTSTRAP.roomAddr || '' });
         toExt({ type: 'join', name: (myNick || '').slice(0, 16) || D.guest });
         break;
@@ -432,10 +432,9 @@
         break;
       case 'full':
         toast(D.roomFull); renderConn('warn', 'connClosed'); break;
-      case 'disconnected':
+      case 'clientDisconnected':
         renderConn('warn', 'connDisconnected'); break;
-      case 'shutdown':
-        renderConn('warn', 'connClosed'); break;
+
       default: break;
     }
   }

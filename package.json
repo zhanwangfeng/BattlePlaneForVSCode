@@ -2,7 +2,7 @@
   "name": "battle-plane-vscode",
   "displayName": "BattlePlane",
   "description": "VS Code 里的经典「炸飞机」小游戏：在 10×10 棋盘摆放 3 架飞机，轰炸并击落敌方全部机头即获胜。",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "zhanwangfeng",
   "license": "MIT",
   "icon": "resources/icon.png",
